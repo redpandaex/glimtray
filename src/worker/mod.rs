@@ -12,6 +12,9 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+// Coalesce writes per display and keep DDC/CI traffic sparse for monitor firmware.
+const WRITE_BATCH_WINDOW: Duration = Duration::from_millis(250);
+
 enum Command {
     Refresh(u64),
     Write(PendingWrite),
@@ -96,7 +99,7 @@ impl Controller {
                             continue;
                         }
                         pending.push(write);
-                        deadline.get_or_insert_with(|| Instant::now() + Duration::from_millis(120));
+                        deadline.get_or_insert_with(|| Instant::now() + WRITE_BATCH_WINDOW);
                     }
                     Err(mpsc::RecvTimeoutError::Timeout) => {}
                 }

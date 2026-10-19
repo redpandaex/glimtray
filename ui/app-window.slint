@@ -14,8 +14,13 @@ component MonitorControl inherits Rectangle {
     in property <bool> busy;
     callback set-brightness(string, int);
     private property <int> model-brightness: root.monitor.brightness;
+    private property <int> preview-brightness: root.monitor.brightness;
     // Slider interaction replaces its value binding; apply later model updates explicitly.
-    changed model-brightness => { brightness-slider.value = root.model-brightness; }
+    // A drag previews locally, so the model may still hold the last committed value.
+    changed model-brightness => {
+        root.preview-brightness = root.model-brightness;
+        brightness-slider.value = root.model-brightness;
+    }
     height: root.monitor.can-control ? 96px : 144px;
     background: transparent;
 
@@ -28,7 +33,7 @@ component MonitorControl inherits Rectangle {
             height: 24px;
             spacing: 12px;
             Text { text: root.monitor.name; overflow: elide; color: Palette.foreground; horizontal-stretch: 1; vertical-alignment: center; }
-            Text { text: root.monitor.can-control ? root.monitor.brightness + "%" : "—"; min-width: 48px; horizontal-alignment: right; vertical-alignment: center; color: Palette.foreground; }
+            Text { text: root.monitor.can-control ? root.preview-brightness + "%" : "—"; min-width: 48px; horizontal-alignment: right; vertical-alignment: center; color: Palette.foreground; }
         }
         brightness-slider := Slider {
             height: 32px;
@@ -36,7 +41,9 @@ component MonitorControl inherits Rectangle {
             maximum: 100;
             value: root.monitor.brightness;
             enabled: root.monitor.can-control && !root.busy;
-            changed(value) => { root.set-brightness(root.monitor.id, round(value)); }
+            // Dragging only updates the local preview; commit one DDC/CI write on release.
+            changed(value) => { root.preview-brightness = round(value); }
+            released(value) => { root.set-brightness(root.monitor.id, round(value)); }
         }
         if !root.monitor.can-control: Text {
             text: root.monitor.message;
