@@ -13,8 +13,8 @@
     {
       "label": "cargo: build release",
       "type": "process",
-      "command": "cargo",
-      "args": ["build", "--release", "--locked"],
+      "command": "powershell",
+      "args": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "${workspaceFolder}/scripts/build-release.ps1"],
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": ["$rustc"],
       "group": "build"

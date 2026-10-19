@@ -5,7 +5,8 @@
 ## 环境
 
 - Windows x64。
-- Rust stable，使用 MSVC 工具链。
+- Rust stable，使用 MSVC 工具链（开发、格式化和测试）。
+- 发布构建使用固定版本的 nightly 和 `rust-src` 组件，见[构建与打包](#构建与打包)。
 - Visual Studio C++ 构建工具及 Windows SDK。
 
 首次构建会下载并编译依赖。仓库已包含所需的 Slint 补丁源码，克隆后可以直接使用 Cargo 构建。
@@ -48,13 +49,18 @@ cargo run --locked -- --list
 
 ## 构建与打包
 
+发布构建使用固定 nightly 的 `build-std` 和 `panic=immediate-abort` 裁剪 panic 格式化代码。项目在 `.cargo/config.toml` 中注册了 `release-build` 别名，首次使用先安装对应工具链：
+
 ```powershell
-cargo build --release --locked
+rustup toolchain install nightly-2026-10-18 --profile minimal --component rust-src
+cargo +nightly-2026-10-18 release-build
 ./scripts/check-runtime-assets.ps1
 ./scripts/package.ps1
 ```
 
-普通编译产物为 `target/release/glimtray.exe`。打包脚本在 `dist/` 生成带版本号的 `glimtray-<version>-windows-x64-standard.exe`，以及内含同一程序（命名为 `glimtray.exe`）和 README 的 ZIP。对应的 SHA256 校验文件同时记录 EXE 和 ZIP 的哈希。
+`./scripts/build-release.ps1` 是同一命令的包装，会先检查工具链再调用该别名。产物位于 `target/x86_64-pc-windows-msvc/release/glimtray.exe`。打包脚本优先选择这个产物，并回退到 `target/release/glimtray.exe`。日常快速构建仍可使用 stable 的 `cargo build --release --locked`，但产物不含 panic 裁剪，体积更大。
+
+打包脚本在 `dist/` 生成带版本号的 `glimtray-<version>-windows-x64-standard.exe`，以及内含同一程序（命名为 `glimtray.exe`）和 README 的 ZIP。对应的 SHA256 校验文件同时记录 EXE 和 ZIP 的哈希。
 
 ### UPX 压缩
 
@@ -66,7 +72,7 @@ cargo build --release --locked
 
 脚本复制编译产物后再压缩，保留 `target/release/glimtray.exe`，生成 `*-compact.exe`、`*-compact.zip` 和覆盖两者的校验文件，并执行 UPX 数据完整性检查。单独的 EXE 可直接运行；ZIP 内的程序名仍为 `glimtray.exe`。
 
-`standard` 和 `compact` 使用相同的应用源码与裁剪依赖，名称只区分是否经过 UPX 压缩。当前本地构建未压缩约 3.70 MiB，压缩后约 1.32 MiB；实际大小会随编译器和版本变化。UPX 减少磁盘体积，运行时需要解压。
+`standard` 和 `compact` 使用相同的应用源码与裁剪依赖，名称只区分是否经过 UPX 压缩。当前本地构建未压缩约 2.62 MiB，压缩后约 0.97 MiB；实际大小会随编译器和版本变化。UPX 减少磁盘体积，运行时需要解压。
 
 ## 架构与依赖
 
@@ -80,11 +86,11 @@ Windows x64 静态链接 CRT，无需额外安装 VC++ Redistributable。界面�
 
 ### 为什么有 vendor 目录？
 
-项目将 `i-slint-core 1.18.1` 保存到 `vendor/`，通过 `[patch.crates-io]` 裁剪 Parley 分词字典、JPEG 解码和 SVG 扩展支持。保留普通界面文字、PNG 和 SVG 矢量路径渲染。SVG 字体桥接改用默认解析选项，移除 SVG 文字、内嵌位图和 SVGZ 支持。
+项目将 `i-slint-core`、`i-slint-backend-winit` 和 `i-slint-renderer-femtovg` 三个 1.18.1 crate 保存到 `vendor/`，通过 `[patch.crates-io]` 裁剪 Parley 分词字典、JPEG 解码和运行时 SVG 解码。保留普通界面文字、系统字体和 PNG 图片；界面使用自绘滑块，不再生成 SVG 资源。SVG 字体桥接改用默认解析选项，运行时不再链接 resvg。
 
-Slint 和 `slint-build` 固定为 `=1.18.1`。本地和 CI 使用同一份源码；升级时需重新核对补丁。来源、校验、许可及语言支持影响见 [vendor/README.md](../vendor/README.md)。`vendor/` 只在构建时使用，无需随 EXE 分发。
+Slint 和 `slint-build` 固定为 `=1.18.1`。本地和 CI 使用同一份源码；升级时需重新核对三个 crate 的补丁。来源、校验、许可及语言支持影响见 [vendor/README.md](../vendor/README.md)。`vendor/` 只在构建时使用，无需随 EXE 分发。
 
-`check-runtime-assets.ps1` 静态检查编译器生成的嵌入资源，拒绝不支持的图片格式及 SVG 文字、位图。CI 另检查运行时特性树，排除构建工具和过程宏的依赖；构建工具仍可使用完整的图片支持。
+`check-runtime-assets.ps1` 静态检查编译器生成的嵌入资源，拒绝不支持的图片格式及 SVG 文字、位图。CI 另检查运行时特性树，排除构建工具和过程宏的依赖；构建工具仍可使用完整的图片和 SVG 支持。
 
 ## 自动构建与发布
 

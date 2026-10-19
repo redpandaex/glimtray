@@ -5,12 +5,23 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 does not auto-load the ZIP assemblies used below.
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 $metadata = & cargo metadata --locked --no-deps --format-version 1 --manifest-path (Join-Path $PSScriptRoot '../Cargo.toml')
 if ($LASTEXITCODE -ne 0) { throw 'Unable to read Cargo package metadata.' }
 $version = (($metadata | ConvertFrom-Json).packages | Where-Object name -eq 'glimtray').version
 if (-not $version) { throw 'GlimTray package version is missing.' }
-$executable = Join-Path $PSScriptRoot '../target/release/glimtray.exe'
-if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'Build the release executable before packaging.' }
+# Prefer the newest release executable: the size-optimized build lands under the
+# target triple directory, while a plain stable build uses target/release.
+$executable = @(
+    (Join-Path $PSScriptRoot '../target/x86_64-pc-windows-msvc/release/glimtray.exe'),
+    (Join-Path $PSScriptRoot '../target/release/glimtray.exe')
+) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Sort-Object { (Get-Item -LiteralPath $_).LastWriteTimeUtc } -Descending |
+    Select-Object -First 1
+if (-not $executable) { throw 'Build the release executable before packaging.' }
+Write-Host "Using $executable"
 
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $OutputDirectory = (Resolve-Path -LiteralPath $OutputDirectory).Path

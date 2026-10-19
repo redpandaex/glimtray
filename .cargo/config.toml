@@ -2,3 +2,9 @@
 # Keep the portable executable independent of the VC++ Redistributable.
 # Match Slint's recommended stack size for Windows debug builds.
 rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/STACK:8000000"]
+
+[alias]
+# Size-optimized release build. Run with the pinned nightly toolchain:
+#   cargo +nightly-2026-10-18 release-build
+# The --config flags replace the target flags above and trim panic formatting.
+release-build = '''build --release --locked --config target."x86_64-pc-windows-msvc".rustflags=["-C","target-feature=+crt-static","-C","link-arg=/STACK:8000000","-Zunstable-options","-Cpanic=immediate-abort"] -Z build-std=std,panic_abort --target x86_64-pc-windows-msvc'''

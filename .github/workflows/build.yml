@@ -64,7 +64,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect Slint runtime dependencies.' }
           if ($features -match '^parley v.*\bcomplex-scripts\b') { throw 'Slint text dictionaries were re-enabled.' }
           if ($features -match '^image v.*\bjpeg\b') { throw 'Runtime JPEG decoding was re-enabled.' }
-          if ($features -match '^resvg v.*\b(text|raster-images|svgz)\b') { throw 'Extra SVG runtime features were re-enabled.' }
+          if ($features -match '^resvg v') { throw 'Runtime SVG decoding was re-enabled.' }
+          if ($features -match '^i-slint-core v.*\bsvg\b') { throw 'i-slint-core SVG decoding was re-enabled.' }
           if ($features -match '^i-slint-common v.*\bsvg-text\b') { throw 'SVG font resolution was re-enabled.' }
 
       - name: Clippy
@@ -76,8 +77,11 @@ jobs:
       - name: Isolated startup registry test
         run: cargo test --locked --lib startup::tests::registry_round_trip -- --ignored --test-threads=1
 
+      - name: Install pinned nightly for the size-optimized release build
+        run: rustup toolchain install nightly-2026-10-18 --profile minimal --component rust-src
+
       - name: Build release
-        run: cargo build --release --locked
+        run: ./scripts/build-release.ps1
 
       - name: Verify embedded images match trimmed runtime support
         run: ./scripts/check-runtime-assets.ps1

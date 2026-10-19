@@ -1,11 +1,17 @@
 [CmdletBinding()]
-param([string] $BuildDirectory = (Join-Path $PSScriptRoot '../target/release/build'))
+param([string] $BuildDirectory)
 
 $ErrorActionPreference = 'Stop'
-$sources = @(foreach ($directory in (Get-ChildItem -LiteralPath $BuildDirectory -Filter 'glimtray-*' -Directory)) {
-    $sourcePath = Join-Path $directory.FullName 'out/app-window.rs'
-    if (Test-Path -LiteralPath $sourcePath -PathType Leaf) { Get-Item -LiteralPath $sourcePath }
-})
+# Windows PowerShell 5.1 does not define $PSScriptRoot inside parameter defaults.
+if (-not $BuildDirectory) {
+    $BuildDirectory = Join-Path $PSScriptRoot '../target/x86_64-pc-windows-msvc/release/build'
+    if (-not (Test-Path -LiteralPath $BuildDirectory)) {
+        $BuildDirectory = Join-Path $PSScriptRoot '../target/release/build'
+    }
+}
+# Plain builds use build/glimtray-<hash>/out; build-std uses build/glimtray/<hash>/out.
+$sources = @(Get-ChildItem -LiteralPath $BuildDirectory -Recurse -Filter 'app-window.rs' -File |
+    Where-Object { $_.Directory.Name -eq 'out' })
 if (-not $sources.Count) { throw 'Build the release executable before checking embedded images.' }
 
 $loadPattern = 'load_image_from_embedded_data\s*\(\s*(?<resource>SLINT_EMBEDDED_RESOURCE_\d+)\s*\.\s*into\s*\(\s*\)\s*,\s*sp\s*::\s*Slice\s*::\s*from_slice\s*\(\s*b"(?<format>[^"]+)"'
