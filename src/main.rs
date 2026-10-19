@@ -10,7 +10,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some("--list") => {
             let mut client = glimtray::worker::Client::new(Default::default());
             let displays = client.refresh().map_err(std::io::Error::other)?;
-            println!("{}", serde_json::to_string_pretty(&displays)?);
+            println!("{}", glimtray::display::json_array(&displays));
             Ok(())
         }
         Some(argument) => Err(format!("不支持的参数：{argument}。只读诊断请使用 --list。").into()),

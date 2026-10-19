@@ -191,7 +191,7 @@ pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
     let input = std::io::stdin();
     let mut output = std::io::stdout().lock();
     for line in input.lock().lines() {
-        let request = serde_json::from_str::<protocol::Request>(&line?)?;
+        let request = protocol::decode_request(&line?)?;
         #[cfg(windows)]
         let reply = match request {
             protocol::Request::Refresh { epoch } => {
@@ -207,8 +207,7 @@ pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
             let _ = request;
             protocol::Reply::Error("当前仅支持 Windows 显示器控制。".into())
         };
-        serde_json::to_writer(&mut output, &reply)?;
-        writeln!(output)?;
+        writeln!(output, "{}", protocol::encode_reply(&reply))?;
         output.flush()?;
     }
     Ok(())

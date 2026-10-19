@@ -1,4 +1,4 @@
-use super::protocol::{Reply, Request, wait_for_reply};
+use super::protocol::{self, Reply, Request, wait_for_reply};
 use crate::display::DisplaySnapshot;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
@@ -82,7 +82,7 @@ impl Client {
         thread::spawn(move || {
             for line in BufReader::new(output).lines() {
                 let reply = line.map_err(|error| error.to_string()).and_then(|line| {
-                    serde_json::from_str(&line)
+                    protocol::decode_reply(&line)
                         .map_err(|error| format!("显示器控制进程响应格式错误：{error}"))
                 });
                 if sender.send(reply).is_err() {
@@ -101,8 +101,7 @@ impl Client {
                 .input
                 .as_mut()
                 .ok_or("控制进程不可用，请刷新显示器列表。")?;
-            serde_json::to_writer(&mut *input, &request).map_err(|error| error.to_string())?;
-            writeln!(input)
+            writeln!(input, "{}", protocol::encode_request(&request))
                 .and_then(|_| input.flush())
                 .map_err(|error| error.to_string())?;
             wait_for_reply(self.replies.as_ref().ok_or("控制进程未连接。")?, timeout)

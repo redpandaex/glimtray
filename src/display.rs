@@ -1,12 +1,63 @@
-use serde::{Deserialize, Serialize};
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplaySnapshot {
     pub id: String,
     pub name: String,
     pub connection: String,
     pub brightness: Option<u8>,
     pub message: String,
+}
+
+/// Format snapshots as the stable pretty JSON used by the `--list` diagnostic.
+pub fn json_array(displays: &[DisplaySnapshot]) -> String {
+    if displays.is_empty() {
+        return "[]".into();
+    }
+    let mut json = String::from("[\n");
+    for (index, display) in displays.iter().enumerate() {
+        let brightness = display
+            .brightness
+            .map(|value| value.to_string())
+            .unwrap_or_else(|| "null".into());
+        json.push_str("  {\n");
+        json.push_str(&format!("    \"id\": {},\n", json_string(&display.id)));
+        json.push_str(&format!("    \"name\": {},\n", json_string(&display.name)));
+        json.push_str(&format!(
+            "    \"connection\": {},\n",
+            json_string(&display.connection)
+        ));
+        json.push_str(&format!("    \"brightness\": {brightness},\n"));
+        json.push_str(&format!(
+            "    \"message\": {}\n",
+            json_string(&display.message)
+        ));
+        json.push_str("  }");
+        if index + 1 < displays.len() {
+            json.push(',');
+        }
+        json.push('\n');
+    }
+    json.push(']');
+    json
+}
+
+fn json_string(value: &str) -> String {
+    let mut json = String::with_capacity(value.len() + 2);
+    json.push('"');
+    for character in value.chars() {
+        match character {
+            '"' => json.push_str("\\\""),
+            '\\' => json.push_str("\\\\"),
+            '\n' => json.push_str("\\n"),
+            '\r' => json.push_str("\\r"),
+            '\t' => json.push_str("\\t"),
+            control if (control as u32) < 0x20 => {
+                json.push_str(&format!("\\u{:04x}", control as u32));
+            }
+            other => json.push(other),
+        }
+    }
+    json.push('"');
+    json
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -80,5 +131,30 @@ mod tests {
         let range = BrightnessRange::new(0, 1, 3).unwrap();
         assert_eq!(range.percent(), 33);
         assert_eq!(range.raw_from_percent(50), 2);
+    }
+
+    #[test]
+    fn json_array_escapes_text_and_preserves_optional_brightness() {
+        let displays = vec![
+            DisplaySnapshot {
+                id: "1:0:0".into(),
+                name: "桌面\t\"显示器\"\\".into(),
+                connection: "DISPLAY1".into(),
+                brightness: Some(75),
+                message: "DDC/CI\n就绪".into(),
+            },
+            DisplaySnapshot {
+                id: "2:0:0".into(),
+                name: "内置屏".into(),
+                connection: "DISPLAY2".into(),
+                brightness: None,
+                message: String::new(),
+            },
+        ];
+        assert_eq!(
+            json_array(&displays),
+            "[\n  {\n    \"id\": \"1:0:0\",\n    \"name\": \"桌面\\t\\\"显示器\\\"\\\\\",\n    \"connection\": \"DISPLAY1\",\n    \"brightness\": 75,\n    \"message\": \"DDC/CI\\n就绪\"\n  },\n  {\n    \"id\": \"2:0:0\",\n    \"name\": \"内置屏\",\n    \"connection\": \"DISPLAY2\",\n    \"brightness\": null,\n    \"message\": \"\"\n  }\n]"
+        );
+        assert_eq!(json_array(&[]), "[]");
     }
 }
