@@ -15,18 +15,18 @@ if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) { throw 'Build the
 New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
 $OutputDirectory = (Resolve-Path -LiteralPath $OutputDirectory).Path
 $variant = 'standard'
+if ($UpxPath) { $variant = 'compact' }
+$stem = "glimtray-$version-windows-x64-$variant"
+$packagedExecutable = Join-Path $OutputDirectory "$stem.exe"
+Copy-Item -LiteralPath $executable -Destination $packagedExecutable -Force
 if ($UpxPath) {
     $upx = (Resolve-Path -LiteralPath $UpxPath -ErrorAction Stop).Path
-    $variant = 'compact'
-    $compact = Join-Path $OutputDirectory "glimtray-$version-windows-x64-compact.exe"
-    Copy-Item -LiteralPath $executable -Destination $compact -Force
-    & $upx --best --lzma --compress-icons=0 --compress-resources=0 $compact | ForEach-Object { Write-Host $_ }
+    & $upx --best --lzma --compress-icons=0 --compress-resources=0 $packagedExecutable | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) { throw 'UPX compression failed.' }
-    & $upx -t $compact | ForEach-Object { Write-Host $_ }
+    & $upx -t $packagedExecutable | ForEach-Object { Write-Host $_ }
     if ($LASTEXITCODE -ne 0) { throw 'UPX integrity check failed.' }
-    $executable = $compact
 }
-$stem = "glimtray-$version-windows-x64-$variant"
+$executable = $packagedExecutable
 $name = "$stem.zip"
 $archive = Join-Path $OutputDirectory $name
 if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
@@ -44,12 +44,18 @@ try {
 }
 finally { $zip.Dispose() }
 $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
-"$hash  $name" | Set-Content -LiteralPath (Join-Path $OutputDirectory "$stem-SHA256SUMS.txt") -Encoding ascii
+$executableHash = (Get-FileHash -LiteralPath $executable -Algorithm SHA256).Hash.ToLowerInvariant()
+$checksums = Join-Path $OutputDirectory "$stem-SHA256SUMS.txt"
+@(
+    "$executableHash  $stem.exe"
+    "$hash  $name"
+) | Set-Content -LiteralPath $checksums -Encoding ascii
 [pscustomobject]@{
     Version = $version
     Variant = $variant
     Executable = $executable
     ExecutableBytes = (Get-Item -LiteralPath $executable).Length
     Archive = $archive
+    Checksums = $checksums
     SHA256 = $hash
 }

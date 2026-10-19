@@ -20,7 +20,7 @@ GlimTray 是一个使用 Rust 和 Slint 开发的 Windows 托盘亮度调节工�
 - **自动读取**：每次展开时重新枚举设备并读取亮度，支持插拔后更新设备列表。
 - **开机自启**：托盘菜单根据当前状态显示开启或关闭操作，支持当前用户的登录自启动。
 - **主题适配**：托盘图标跟随 Windows 系统任务栏的深浅主题。
-- **便携运行**：解压后直接运行，无需安装；当前本地 Release 构建经 UPX 压缩后约 1.3 MiB，具体大小以发布附件为准。
+- **便携运行**：下载 EXE 即可运行，无需安装，也提供 ZIP；当前本地 Release 构建经 UPX 压缩后约 1.3 MiB，具体大小以发布附件为准。
 
 ## 运行要求
 
@@ -32,8 +32,8 @@ GlimTray 是一个使用 Rust 和 Slint 开发的 Windows 托盘亮度调节工�
 
 ## 下载与使用
 
-1. 前往 [Releases](https://github.com/redpandaex/glimtray/releases)，下载 Windows x64 便携 ZIP。发布页提供对应的 SHA256 校验文件。
-2. 将文件完整解压到固定目录，运行 `glimtray.exe`。程序启动后驻留托盘。
+1. 前往 [Releases](https://github.com/redpandaex/glimtray/releases)，下载 Windows x64 的 `*-compact.exe`，保存到固定目录后双击运行。程序启动后驻留托盘。
+2. 也可下载 `*-compact.zip`，完整解压后运行其中的 `glimtray.exe`，与单独下载的 EXE 是同一程序。发布页的 SHA256 校验文件同时覆盖 EXE 和 ZIP；旧版本若仅提供 ZIP，解压运行即可。
 3. 左击托盘图标，等待亮度读取完成后拖动对应滑块。读取期间滑块暂时禁用。
 4. 右键托盘图标，点击“开启开机自启”即可启用；保存成功后菜单变为“关闭开机自启”，再次点击即可关闭。选择“退出”结束程序。
 

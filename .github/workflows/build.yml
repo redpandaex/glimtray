@@ -101,6 +101,7 @@ jobs:
         with:
           name: windows-x64-${{ github.sha }}
           path: |
+            dist/*.exe
             dist/*.zip
             dist/*-SHA256SUMS.txt
           if-no-files-found: error
@@ -132,4 +133,4 @@ jobs:
           set -euo pipefail
           args=(--verify-tag --generate-notes --title "GlimTray ${RELEASE_TAG}")
           if [[ "$PRERELEASE" == "true" ]]; then args+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" dist/*.zip dist/*-SHA256SUMS.txt "${args[@]}"
+          gh release create "$RELEASE_TAG" dist/*.exe dist/*.zip dist/*-SHA256SUMS.txt "${args[@]}"

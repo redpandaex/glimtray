@@ -54,7 +54,7 @@ cargo build --release --locked
 ./scripts/package.ps1
 ```
 
-普通编译产物为 `target/release/glimtray.exe`。打包脚本生成 `dist/glimtray-<version>-windows-x64-standard.zip`，内含 `glimtray.exe` 和 README，并生成对应的 SHA256 校验文件。
+普通编译产物为 `target/release/glimtray.exe`。打包脚本在 `dist/` 生成带版本号的 `glimtray-<version>-windows-x64-standard.exe`，以及内含同一程序（命名为 `glimtray.exe`）和 README 的 ZIP。对应的 SHA256 校验文件同时记录 EXE 和 ZIP 的哈希。
 
 ### UPX 压缩
 
@@ -64,7 +64,7 @@ cargo build --release --locked
 ./scripts/package.ps1 -UpxPath 'C:/tools/upx.exe'
 ```
 
-脚本复制编译产物后再压缩，保留 `target/release/glimtray.exe`，生成 `*-compact.exe`、`*-compact.zip` 和校验文件，并执行 UPX 数据完整性检查。ZIP 内的程序名仍为 `glimtray.exe`。
+脚本复制编译产物后再压缩，保留 `target/release/glimtray.exe`，生成 `*-compact.exe`、`*-compact.zip` 和覆盖两者的校验文件，并执行 UPX 数据完整性检查。单独的 EXE 可直接运行；ZIP 内的程序名仍为 `glimtray.exe`。
 
 `standard` 和 `compact` 使用相同的应用源码与裁剪依赖，名称只区分是否经过 UPX 压缩。当前本地构建未压缩约 3.70 MiB，压缩后约 1.32 MiB；实际大小会随编译器和版本变化。UPX 减少磁盘体积，运行时需要解压。
 
@@ -96,7 +96,7 @@ Slint 和 `slint-build` 固定为 `=1.18.1`。本地和 CI 使用同一份源码
 2. tag 去掉 `v` 后与该提交的 `Cargo.toml` 版本一致。
 3. 发布校验、格式、依赖特性、Clippy、测试及 Release 构建全部成功。
 
-发布附件为 `*-compact.zip` 和对应的 SHA256 校验文件。带 `-rc.1` 等后缀的版本会创建预发布版。普通 main 推送和 PR 只生成 Actions 构建产物。
+发布附件为可直接运行的 `*-compact.exe`、便携压缩包 `*-compact.zip` 和覆盖两者的 SHA256 校验文件。带 `-rc.1` 等后缀的版本会创建预发布版。普通 main 推送和 PR 只生成 Actions 构建产物。附件配置随新版本 tag 生效，已发布版本的附件不会自动补充。
 
 ### 发布步骤
 
