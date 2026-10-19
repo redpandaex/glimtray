@@ -39,7 +39,7 @@
       "label": "cargo: clippy",
       "type": "process",
       "command": "cargo",
-      "args": ["clippy", "--locked", "--all-targets", "--", "-D", "warnings"],
+      "args": ["clippy", "--locked", "--all-targets", "--no-deps", "--", "-D", "warnings"],
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": ["$rustc"]
     },
@@ -47,7 +47,7 @@
       "label": "cargo: fmt",
       "type": "process",
       "command": "cargo",
-      "args": ["fmt", "--all"],
+      "args": ["fmt", "--package", "glimtray"],
       "options": { "cwd": "${workspaceFolder}" },
       "problemMatcher": []
     }

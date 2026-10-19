@@ -7,7 +7,8 @@
     ".git/**",
     "target/**",
     "Cargo.lock",
-    "work/**"
+    "work/**",
+    "vendor/i-slint-core-1.18.1/**"
   ],
   "words": [
     "Clippy",

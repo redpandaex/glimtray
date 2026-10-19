@@ -264,6 +264,34 @@ pub fn dark_taskbar() -> bool {
     result == ERROR_SUCCESS && light == 0
 }
 
+pub fn finish_startup_feedback() {
+    use windows::Win32::Foundation::{HWND, WPARAM};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetMessageW, MSG, PM_NOREMOVE, PeekMessageW, PostMessageW, PostQuitMessage,
+        RegisterWindowMessageW,
+    };
+
+    // Windows ends GUI startup feedback on GetMessage. Winit only uses PeekMessage,
+    // and the hidden DDC worker has no event loop. Consume only our own thread message.
+    // SAFETY: The queue and message buffer belong to this thread. A successful post
+    // precedes the filtered GetMessage, so it does not wait for external input.
+    unsafe {
+        let ready = RegisterWindowMessageW(w!("GlimTray.StartupReady"));
+        if ready == 0 {
+            return;
+        }
+        let mut message = MSG::default();
+        let _ = PeekMessageW(&mut message, None, 0, 0, PM_NOREMOVE);
+        if PostMessageW(None, ready, WPARAM(0), LPARAM(0)).is_err() {
+            return;
+        }
+        if GetMessageW(&mut message, Some(HWND(-1isize as _)), ready, ready).0 == 0 {
+            // WM_QUIT bypasses filters; preserve it for the actual event loop.
+            PostQuitMessage(message.wParam.0 as i32);
+        }
+    }
+}
+
 pub fn flyout_anchor() -> Option<crate::flyout::Anchor> {
     use crate::flyout::{Anchor, Point, Rect};
     use windows::Win32::Foundation::POINT;

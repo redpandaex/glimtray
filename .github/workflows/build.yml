@@ -56,10 +56,16 @@ jobs:
         run: ./scripts/test-release-guard.ps1
 
       - name: Check formatting
-        run: cargo fmt --all -- --check
+        run: cargo fmt --package glimtray -- --check
+
+      - name: Verify Slint dictionary trimming
+        run: |
+          $features = & cargo tree --locked --target x86_64-pc-windows-msvc --edges features --invert parley
+          if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect Slint text dependencies.' }
+          if ($features -match 'complex-scripts') { throw 'Slint text dictionaries were re-enabled.' }
 
       - name: Clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets --no-deps -- -D warnings
 
       - name: Unit tests
         run: cargo test --locked
@@ -70,9 +76,18 @@ jobs:
       - name: Build release
         run: cargo build --release --locked
 
-      - name: Package portable executable
+      - name: Package compact portable executable
         run: |
-          $package = ./scripts/package.ps1
+          $upxVersion = '5.2.1'
+          $upxArchive = Join-Path $env:RUNNER_TEMP "upx-$upxVersion-win64.zip"
+          Invoke-WebRequest -Uri "https://github.com/upx/upx/releases/download/v$upxVersion/upx-$upxVersion-win64.zip" -OutFile $upxArchive
+          $expectedHash = 'eabc6792a347d45e945be7748423e7868fd01b0d2bcaa2f4b1031fd71ff69bda'
+          if ((Get-FileHash -LiteralPath $upxArchive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) {
+            throw 'UPX archive checksum mismatch.'
+          }
+          $upxDirectory = Join-Path $env:RUNNER_TEMP 'glimtray-upx'
+          Expand-Archive -LiteralPath $upxArchive -DestinationPath $upxDirectory -Force
+          $package = ./scripts/package.ps1 -UpxPath (Join-Path $upxDirectory "upx-$upxVersion-win64/upx.exe")
           Write-Output "$($package.Archive) SHA256: $($package.SHA256)"
 
       - name: Upload build artifact
@@ -81,7 +96,7 @@ jobs:
           name: windows-x64-${{ github.sha }}
           path: |
             dist/*.zip
-            dist/SHA256SUMS.txt
+            dist/*-SHA256SUMS.txt
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
@@ -111,4 +126,4 @@ jobs:
           set -euo pipefail
           args=(--verify-tag --generate-notes --title "GlimTray ${RELEASE_TAG}")
           if [[ "$PRERELEASE" == "true" ]]; then args+=(--prerelease); fi
-          gh release create "$RELEASE_TAG" dist/*.zip dist/SHA256SUMS.txt "${args[@]}"
+          gh release create "$RELEASE_TAG" dist/*.zip dist/*-SHA256SUMS.txt "${args[@]}"

@@ -182,6 +182,8 @@ impl Drop for Controller {
 pub fn serve() -> Result<(), Box<dyn std::error::Error>> {
     use std::io::{BufRead, Write};
     #[cfg(windows)]
+    crate::native::finish_startup_feedback();
+    #[cfg(windows)]
     let mut backend = crate::native::NativeBackend::default();
     let input = std::io::stdin();
     let mut output = std::io::stdout().lock();

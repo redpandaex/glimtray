@@ -1,9 +1,8 @@
 use crate::flyout_window::Flyout;
-use crate::{AppTray, AppWindow, MonitorRow, QuickPanel};
+use crate::{AppTray, MonitorRow, QuickPanel};
 use glimtray::display::DisplaySnapshot;
 use glimtray::queue::{PendingWrite, Revisions};
 use glimtray::worker::{Controller, Update};
-use slint::winit_030::WinitWindowAccessor;
 use slint::{ComponentHandle, Model, VecModel};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -21,7 +20,6 @@ fn row_from_snapshot(display: DisplaySnapshot) -> MonitorRow {
     MonitorRow {
         id: display.id.into(),
         name: display.name.into(),
-        connection: display.connection.into(),
         brightness: i32::from(display.brightness.unwrap_or(0)),
         can_control: display.brightness.is_some(),
         pending: false,
@@ -33,7 +31,7 @@ fn find_row(rows: &VecModel<MonitorRow>, id: &str) -> Option<(usize, MonitorRow)
     rows.iter().enumerate().find(|(_, row)| row.id == id)
 }
 
-fn refresh(ui: &AppWindow, state: &RefCell<State>, controller: &Controller) {
+fn refresh(ui: &QuickPanel, state: &RefCell<State>, controller: &Controller) {
     let mut state = state.borrow_mut();
     if state.scanning {
         return;
@@ -51,7 +49,7 @@ fn refresh(ui: &AppWindow, state: &RefCell<State>, controller: &Controller) {
     controller.refresh();
 }
 
-fn apply_update(ui: &AppWindow, state: &RefCell<State>, update: Update) {
+fn apply_update(ui: &QuickPanel, state: &RefCell<State>, update: Update) {
     let mut state = state.borrow_mut();
     match update {
         Update::Listed(result) => {
@@ -138,20 +136,21 @@ pub fn run() -> Result<(), slint::PlatformError> {
         .backend_name("winit".into())
         .with_winit_window_attributes_hook(crate::flyout_window::window_attributes)
         .select()?;
-    let ui = AppWindow::new()?;
-    let panel = QuickPanel::new()?;
+    let ui = QuickPanel::new()?;
     let tray = AppTray::new()?;
     #[cfg(windows)]
     match glimtray::startup::Startup::current() {
-        Ok(startup) => bind_startup(&ui, startup.enabled(), move |enabled| {
-            startup.set_enabled(enabled)
-        }),
-        Err(error) => bind_startup(&ui, Err(error), |_| unreachable!()),
+        Ok(startup) => bind_startup(
+            &tray,
+            startup.enabled(),
+            move |enabled| startup.set_enabled(enabled),
+            report_error,
+        ),
+        Err(error) => bind_startup(&tray, Err(error), |_| unreachable!(), report_error),
     }
-    let flyout = Flyout::new(&panel)?;
+    let flyout = Flyout::new(&ui)?;
     let rows = Rc::new(VecModel::<MonitorRow>::default());
     ui.set_monitors(rows.clone().into());
-    panel.set_monitors(rows.clone().into());
     let state = Rc::new(RefCell::new(State {
         rows,
         revisions: Revisions::default(),
@@ -168,14 +167,19 @@ pub fn run() -> Result<(), slint::PlatformError> {
     {
         let state = state.clone();
         let weak = ui.as_weak();
-        let weak_panel = panel.as_weak();
+        let layout = flyout.clone();
         ui.on_drain_updates(move || {
             if let Some(ui) = weak.upgrade() {
+                let mut resize = false;
                 for update in receiver.try_iter() {
+                    resize |= matches!(
+                        &update,
+                        Update::Listed(_) | Update::Applied { result: Err(_), .. }
+                    );
                     apply_update(&ui, &state, update);
                 }
-                if let Some(panel) = weak_panel.upgrade() {
-                    sync_panel(&ui, &panel);
+                if resize {
+                    layout.refresh_layout();
                 }
             }
         });
@@ -184,13 +188,9 @@ pub fn run() -> Result<(), slint::PlatformError> {
         let state = state.clone();
         let controller = controller.clone();
         let weak = ui.as_weak();
-        let weak_panel = panel.as_weak();
         ui.on_refresh(move || {
             if let Some(ui) = weak.upgrade() {
                 refresh(&ui, &state, &controller);
-                if let Some(panel) = weak_panel.upgrade() {
-                    sync_panel(&ui, &panel);
-                }
             }
         });
     }
@@ -222,18 +222,10 @@ pub fn run() -> Result<(), slint::PlatformError> {
             });
         });
     }
-    bind_flyout(&ui, &panel, &tray, &flyout);
-    let weak = ui.as_weak();
-    tray.on_refresh(move || {
-        if let Some(ui) = weak.upgrade() {
-            ui.invoke_refresh();
-        }
-    });
+    bind_flyout(&ui, &tray, &flyout);
     tray.on_quit(|| {
         let _ = slint::quit_event_loop();
     });
-    ui.window()
-        .on_close_requested(|| slint::CloseRequestResponse::HideWindow);
 
     let theme_timer = slint::Timer::default();
     #[cfg(windows)]
@@ -251,71 +243,80 @@ pub fn run() -> Result<(), slint::PlatformError> {
         );
     }
     tray.show()?;
+    #[cfg(windows)]
+    glimtray::native::finish_startup_feedback();
     refresh(&ui, &state, &controller);
-    sync_panel(&ui, &panel);
     let result = slint::run_event_loop();
     theme_timer.stop();
     controller.shutdown();
     result
 }
 
-fn sync_panel(ui: &AppWindow, panel: &QuickPanel) {
-    panel.set_busy(ui.get_busy());
-    panel.set_status(ui.get_status());
+fn report_error(message: String) {
+    #[cfg(windows)]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MessageBoxW};
+        use windows::core::{PCWSTR, w};
+        let text: Vec<u16> = message.encode_utf16().chain([0]).collect();
+        // SAFETY: The title and message are terminated and live for the modal call.
+        unsafe {
+            MessageBoxW(
+                None,
+                PCWSTR(text.as_ptr()),
+                w!("GlimTray"),
+                MB_OK | MB_ICONERROR,
+            );
+        }
+    }
+    #[cfg(not(windows))]
+    eprintln!("{message}");
 }
 
 fn bind_startup(
-    ui: &AppWindow,
+    tray: &AppTray,
     initial: Result<bool, String>,
     save: impl Fn(bool) -> Result<(), String> + 'static,
+    report: impl Fn(String) + 'static,
 ) {
     let enabled = match initial {
         Ok(enabled) => {
-            ui.set_startup_available(true);
-            ui.set_startup_error("".into());
+            tray.set_startup_available(true);
+            tray.set_startup_error("".into());
             enabled
         }
         Err(error) => {
-            ui.set_startup_available(false);
-            ui.set_startup_error(format!("无法读取自启设置：{error}").into());
+            tray.set_startup_available(false);
+            tray.set_startup_error(format!("无法读取自启设置：{error}").into());
             false
         }
     };
-    ui.set_startup_enabled(enabled);
+    tray.set_startup_enabled(enabled);
     let confirmed = Cell::new(enabled);
-    let weak = ui.as_weak();
-    ui.on_set_startup(move |enabled| {
-        let Some(ui) = weak.upgrade() else { return };
-        if !ui.get_startup_available() {
+    let weak = tray.as_weak();
+    tray.on_set_startup(move |enabled| {
+        let Some(tray) = weak.upgrade() else { return };
+        if !tray.get_startup_available() {
+            tray.set_startup_enabled(confirmed.get());
             return;
         }
         match save(enabled) {
             Ok(()) => {
                 confirmed.set(enabled);
-                ui.set_startup_enabled(enabled);
-                ui.set_startup_error("".into());
+                tray.set_startup_enabled(enabled);
+                tray.set_startup_error("".into());
             }
             Err(error) => {
-                ui.set_startup_enabled(confirmed.get());
-                ui.set_startup_error(format!("无法保存自启设置：{error}").into());
+                tray.set_startup_enabled(confirmed.get());
+                let message = format!("无法保存自启设置：{error}");
+                tray.set_startup_error(message.clone().into());
+                report(message);
             }
         }
     });
 }
 
-fn bind_flyout(ui: &AppWindow, panel: &QuickPanel, tray: &AppTray, flyout: &Flyout) {
-    let weak = ui.as_weak();
-    let handler = flyout.clone();
-    tray.on_open_main(move || {
-        handler.hide();
-        if let Some(ui) = weak.upgrade() {
-            ui.window().set_minimized(false);
-            let _ = ui.show();
-            ui.window()
-                .with_winit_window(|window| window.focus_window());
-        }
-    });
-    let weak = ui.as_weak();
+fn bind_flyout(panel: &QuickPanel, tray: &AppTray, flyout: &Flyout) {
+    let weak = panel.as_weak();
     let handler = flyout.clone();
     tray.on_toggle_panel(move || match handler.toggle() {
         Ok(true) => {
@@ -325,21 +326,7 @@ fn bind_flyout(ui: &AppWindow, panel: &QuickPanel, tray: &AppTray, flyout: &Flyo
         }
         Ok(false) => {}
         Err(error) => {
-            if let Some(ui) = weak.upgrade() {
-                ui.set_status(format!("无法打开亮度面板：{error}").into());
-            }
-        }
-    });
-    let weak = ui.as_weak();
-    panel.on_refresh(move || {
-        if let Some(ui) = weak.upgrade() {
-            ui.invoke_refresh();
-        }
-    });
-    let weak = ui.as_weak();
-    panel.on_set_brightness(move |id, percent| {
-        if let Some(ui) = weak.upgrade() {
-            ui.invoke_set_brightness(id, percent);
+            report_error(format!("无法打开亮度面板：{error}"));
         }
     });
 }
@@ -351,7 +338,7 @@ mod tests {
 
     fn click_slider(panel: &QuickPanel, x: f32) {
         use slint::platform::{PointerEventButton, WindowEvent};
-        let position = slint::LogicalPosition::new(x, 120.0);
+        let position = slint::LogicalPosition::new(x, 76.0);
         panel.window().dispatch_event(WindowEvent::PointerPressed {
             position,
             button: PointerEventButton::Left,
@@ -378,30 +365,26 @@ mod tests {
             .with_winit_window_attributes_hook(crate::flyout_window::window_attributes)
             .select()
             .unwrap();
-        let ui = AppWindow::new().unwrap();
         let panel = QuickPanel::new().unwrap();
         let tray = AppTray::new().unwrap();
         let flyout = Flyout::new(&panel).unwrap();
         let rows = Rc::new(VecModel::from(vec![MonitorRow {
             id: "test".into(),
             name: "测试显示器".into(),
-            connection: "test".into(),
             brightness: 50,
             can_control: true,
             pending: false,
             message: "DDC/CI".into(),
         }]));
-        ui.set_monitors(rows.clone().into());
         panel.set_monitors(rows.clone().into());
-        ui.set_busy(false);
-        sync_panel(&ui, &panel);
+        panel.set_busy(false);
         let refreshes = Rc::new(Cell::new(0));
         let count = refreshes.clone();
-        ui.on_refresh(move || count.set(count.get() + 1));
+        panel.on_refresh(move || count.set(count.get() + 1));
         let requested = Rc::new(Cell::new(0));
         let value = requested.clone();
         let model = rows.clone();
-        ui.on_set_brightness(move |id, percent| {
+        panel.on_set_brightness(move |id, percent| {
             value.set(percent);
             if let Some((index, mut row)) = find_row(&model, &id) {
                 row.brightness = percent;
@@ -412,21 +395,27 @@ mod tests {
         let startup_fail = Rc::new(Cell::new(false));
         let value = startup_value.clone();
         let fail = startup_fail.clone();
-        bind_startup(&ui, Ok(false), move |enabled| {
-            if fail.get() {
-                return Err("test save failure".into());
-            }
-            value.set(enabled);
-            Ok(())
-        });
-        bind_flyout(&ui, &panel, &tray, &flyout);
+        let startup_reports = Rc::new(RefCell::new(Vec::<String>::new()));
+        let reports = startup_reports.clone();
+        bind_startup(
+            &tray,
+            Ok(false),
+            move |enabled| {
+                if fail.get() {
+                    return Err("test save failure".into());
+                }
+                value.set(enabled);
+                Ok(())
+            },
+            move |message| reports.borrow_mut().push(message),
+        );
+        bind_flyout(&panel, &tray, &flyout);
         tray.show().unwrap();
 
         let stage = Rc::new(Cell::new(0));
         let completed = stage.clone();
         let error = Rc::new(RefCell::new(None::<String>));
         let test_error = error.clone();
-        let weak_ui = ui.as_weak();
         let weak_panel = panel.as_weak();
         let weak_tray = tray.as_weak();
         let timer = slint::Timer::default();
@@ -437,17 +426,16 @@ mod tests {
             // Let the native widget's 150 ms hover/focus animation settle before snapshots.
             Duration::from_millis(220),
             move || {
-                let ui = weak_ui.upgrade().unwrap();
                 let panel = weak_panel.upgrade().unwrap();
                 let tray = weak_tray.upgrade().unwrap();
                 let outcome = (|| -> Result<(), String> {
                     match stage.get() {
                         0 => {
-                            if ui.window().is_visible() || panel.window().is_visible() {
+                            if panel.window().is_visible() {
                                 return Err("startup unexpectedly shows a window".into());
                             }
                             tray.invoke_toggle_panel();
-                            if ui.window().is_visible() || !panel.window().is_visible() {
+                            if !panel.window().is_visible() {
                                 return Err("left click did not open only the flyout".into());
                             }
                             if refreshes.get() != 1 {
@@ -543,54 +531,30 @@ mod tests {
                             if panel.window().is_visible() {
                                 return Err("focus loss did not dismiss the flyout".into());
                             }
-                            let _ = ui.hide();
-                            tray.invoke_open_main();
-                            if !ui.window().is_visible() || panel.window().is_visible() {
-                                return Err("main-window menu action has the wrong target".into());
+                            tray.invoke_set_startup(true);
+                            if !tray.get_startup_enabled() {
+                                return Err("startup state is not available in the tray menu".into());
                             }
-                            let mut row = rows.row_data(0).unwrap();
-                            row.pending = false;
-                            rows.set_row_data(0, row);
-                        }
-                        10 => {
-                            let pixels = ui.window().take_snapshot()
-                                .map_err(|error| error.to_string())?;
-                            std::fs::write("work/main-smoke.rgba", pixels.as_bytes())
-                                .map_err(|error| error.to_string())?;
-                            std::fs::write("work/main-smoke-size.json", format!("[{},{}]", pixels.width(), pixels.height()))
-                                .map_err(|error| error.to_string())?;
-                            *before_pending.borrow_mut() = Some(pixels.as_bytes().to_vec());
-                            let mut row = rows.row_data(0).unwrap();
-                            row.pending = true;
-                            rows.set_row_data(0, row);
-                        }
-                        11 => {
-                            let pixels = ui.window().take_snapshot()
-                                .map_err(|error| error.to_string())?;
-                            if before_pending.borrow().as_deref() != Some(pixels.as_bytes()) {
-                                return Err("pending brightness changed the main window layout".into());
-                            }
-                            ui.invoke_set_startup(true);
-                            if !startup_value.get() || !ui.get_startup_enabled() {
-                                return Err("startup switch did not save the enabled state".into());
+                            if !startup_value.get() {
+                                return Err("startup menu did not save the enabled state".into());
                             }
                             startup_fail.set(true);
-                            ui.invoke_set_startup(false);
-                            if !ui.get_startup_enabled() || ui.get_startup_error().is_empty() {
-                                return Err("failed startup save did not restore the switch and report an error".into());
+                            tray.invoke_set_startup(false);
+                            if !tray.get_startup_enabled() || tray.get_startup_error().is_empty() || startup_reports.borrow().len() != 1 {
+                                return Err("failed startup save did not restore the menu state and report an error".into());
                             }
                             startup_fail.set(false);
-                            ui.invoke_set_startup(false);
-                            if startup_value.get() || ui.get_startup_enabled() || !ui.get_startup_error().is_empty() {
-                                return Err("startup switch did not save the disabled state".into());
+                            tray.invoke_set_startup(false);
+                            if startup_value.get() || tray.get_startup_enabled() || !tray.get_startup_error().is_empty() {
+                                return Err("startup menu did not save the disabled state".into());
                             }
-                            bind_startup(&ui, Err("test read failure".into()), |_| unreachable!());
-                            if ui.get_startup_available() || ui.get_startup_error().is_empty() {
-                                return Err("failed startup read did not disable the switch and report an error".into());
+                            bind_startup(&tray, Err("test read failure".into()), |_| unreachable!(), |_| unreachable!());
+                            if tray.get_startup_available() || tray.get_startup_error().is_empty() {
+                                return Err("failed startup read did not disable the menu and report an error".into());
                             }
-                            bind_startup(&ui, Ok(true), |_| Ok(()));
-                            if !ui.get_startup_enabled() || !ui.get_startup_available() || !ui.get_startup_error().is_empty() {
-                                return Err("startup switch did not load the persisted enabled state".into());
+                            bind_startup(&tray, Ok(true), |_| Ok(()), |_| unreachable!());
+                            if !tray.get_startup_enabled() || !tray.get_startup_available() || !tray.get_startup_error().is_empty() {
+                                return Err("startup menu did not load the persisted enabled state".into());
                             }
                             let _ = slint::quit_event_loop();
                         }
@@ -608,13 +572,12 @@ mod tests {
         slint::run_event_loop().unwrap();
         timer.stop();
         let _ = panel.hide();
-        let _ = ui.hide();
         let _ = tray.hide();
         assert!(
             error.borrow().is_none(),
             "UI regression: {:?}",
             error.borrow()
         );
-        assert_eq!(completed.get(), 12);
+        assert_eq!(completed.get(), 10);
     }
 }

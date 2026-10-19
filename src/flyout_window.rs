@@ -1,5 +1,5 @@
 use crate::QuickPanel;
-use glimtray::flyout::{TrayAction, placement, tray_action};
+use glimtray::flyout::{Anchor, TrayAction, placement, tray_action};
 use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 use slint::{ComponentHandle, Model};
 use std::cell::RefCell;
@@ -13,6 +13,7 @@ struct Session {
     generation: u64,
     focused: bool,
     dismissed_press: Option<u64>,
+    anchor: Option<Anchor>,
 }
 
 #[derive(Clone)]
@@ -106,24 +107,50 @@ impl Flyout {
     }
 
     fn show(&self, panel: &QuickPanel) -> Result<(), slint::PlatformError> {
+        #[cfg(windows)]
+        let anchor = glimtray::native::flyout_anchor();
+        #[cfg(not(windows))]
+        let anchor = None;
         let mut session = self.session.borrow_mut();
         session.generation = session.generation.wrapping_add(1);
         session.focused = false;
-        let generation = session.generation;
+        session.anchor = anchor;
         drop(session);
+        self.fit(panel, anchor);
+        panel.show()?;
+        panel.window().with_winit_window(|window| {
+            #[cfg(windows)]
+            {
+                use winit::platform::windows::WindowExtWindows;
+                window.set_skip_taskbar(true);
+            }
+            window.focus_window();
+        });
+        Ok(())
+    }
+
+    pub fn refresh_layout(&self) {
+        if let Some(panel) = self
+            .panel
+            .upgrade()
+            .filter(|panel| panel.window().is_visible())
+        {
+            let anchor = self.session.borrow().anchor;
+            self.fit(&panel, anchor);
+        }
+    }
+
+    fn fit(&self, panel: &QuickPanel, anchor: Option<Anchor>) {
+        let generation = self.session.borrow().generation;
         let model = panel.get_monitors();
         let row_height: f32 = (0..model.row_count())
             .filter_map(|index| model.row_data(index))
             .map(|row| if row.can_control { 96.0 } else { 144.0 })
             .sum();
-        let height = (76.0 + row_height.max(96.0)).min(520.0);
+        let height = (32.0 + row_height.max(96.0)).min(520.0);
         panel
             .window()
             .set_size(slint::LogicalSize::new(360.0, height));
-        #[cfg(windows)]
-        let anchor = glimtray::native::flyout_anchor();
-        #[cfg(not(windows))]
-        let anchor = None;
         if let Some(anchor) = anchor {
             let bounds = placement(
                 anchor,
@@ -135,15 +162,6 @@ impl Flyout {
                 .window()
                 .set_position(slint::PhysicalPosition::new(bounds.left, bounds.top));
         }
-        panel.show()?;
-        panel.window().with_winit_window(|window| {
-            #[cfg(windows)]
-            {
-                use winit::platform::windows::WindowExtWindows;
-                window.set_skip_taskbar(true);
-            }
-            window.focus_window();
-        });
         let later = self.clone();
         slint::Timer::single_shot(Duration::from_millis(20), move || {
             if later.session.borrow().generation != generation {
@@ -169,7 +187,6 @@ impl Flyout {
                     .set_position(slint::PhysicalPosition::new(bounds.left, bounds.top));
             }
         });
-        Ok(())
     }
 }
 
