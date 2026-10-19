@@ -336,9 +336,9 @@ mod tests {
     use super::*;
     use slint::winit_030::winit::platform::windows::EventLoopBuilderExtWindows;
 
-    fn click_slider(panel: &QuickPanel, x: f32) {
+    fn click_slider(panel: &QuickPanel, x: f32, y: f32) {
         use slint::platform::{PointerEventButton, WindowEvent};
-        let position = slint::LogicalPosition::new(x, 76.0);
+        let position = slint::LogicalPosition::new(x, y);
         panel.window().dispatch_event(WindowEvent::PointerPressed {
             position,
             button: PointerEventButton::Left,
@@ -468,13 +468,13 @@ mod tests {
                             if before_pending.borrow().as_deref() != Some(pixels.as_bytes()) {
                                 return Err("pending brightness changed the flyout layout".into());
                             }
-                            click_slider(&panel, 180.0);
+                            click_slider(&panel, 180.0, 65.0);
                         }
                         3 => {
                             let pixels = panel.window().take_snapshot()
                                 .map_err(|error| error.to_string())?;
                             *before_pending.borrow_mut() = Some(pixels.as_bytes().to_vec());
-                            click_slider(&panel, 272.0);
+                            click_slider(&panel, 272.0, 56.0);
                             if requested.get() < 70 {
                                 return Err("pointer input did not operate the actual slider".into());
                             }

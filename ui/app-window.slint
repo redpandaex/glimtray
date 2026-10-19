@@ -23,6 +23,16 @@ component BrightnessSlider inherits Rectangle {
     private property <bool> dragging: false;
     private property <length> drag-offset: root.thumb-size / 2;
 
+    hover-background := Rectangle {
+        y: (root.height - 28px) / 2;
+        width: 100%;
+        height: 28px;
+        border-radius: 14px;
+        background: Palette.control-background;
+        opacity: touch.has-hover && root.enabled ? 1 : 0;
+        animate opacity { duration: 120ms; }
+    }
+
     rail := Rectangle {
         x: root.thumb-size / 2;
         y: (root.height - 4px) / 2;
@@ -66,8 +76,10 @@ component BrightnessSlider inherits Rectangle {
     }
 
     touch := TouchArea {
+        x: 0;
+        y: -6px;
         width: 100%;
-        height: 100%;
+        height: root.height + 12px;
         enabled: root.enabled;
         pointer-event(event) => {
             if (event.button != PointerEventButton.left) {
