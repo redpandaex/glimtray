@@ -1,0 +1,201 @@
+import { Button, ListView, Palette, Slider, Switch } from "std-widgets.slint";
+
+export struct MonitorRow {
+    id: string,
+    name: string,
+    connection: string,
+    brightness: int,
+    can-control: bool,
+    pending: bool,
+    message: string,
+}
+
+component MonitorControl inherits Rectangle {
+    in property <MonitorRow> monitor;
+    in property <bool> busy;
+    callback set-brightness(string, int);
+    private property <int> model-brightness: root.monitor.brightness;
+    // Slider interaction replaces its value binding; apply later model updates explicitly.
+    changed model-brightness => { brightness-slider.value = root.model-brightness; }
+    height: root.monitor.can-control ? 96px : 144px;
+    background: transparent;
+
+    VerticalLayout {
+        padding-top: 8px;
+        padding-bottom: 12px;
+        spacing: 12px;
+        alignment: start;
+        HorizontalLayout {
+            height: 24px;
+            spacing: 12px;
+            Text { text: root.monitor.name; overflow: elide; color: Palette.foreground; horizontal-stretch: 1; vertical-alignment: center; }
+            Text { text: root.monitor.can-control ? root.monitor.brightness + "%" : "—"; min-width: 48px; horizontal-alignment: right; vertical-alignment: center; color: Palette.foreground; }
+        }
+        brightness-slider := Slider {
+            height: 32px;
+            minimum: 0;
+            maximum: 100;
+            value: root.monitor.brightness;
+            enabled: root.monitor.can-control && !root.busy;
+            changed(value) => { root.set-brightness(root.monitor.id, round(value)); }
+        }
+        if !root.monitor.can-control: Text {
+            text: root.monitor.message;
+            font-size: 12px;
+            color: Palette.foreground;
+            opacity: 0.75;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component AppWindow inherits Window {
+    title: "GlimTray · 微光";
+    icon: @image-url("../assets/icons/glimtray.png");
+    preferred-width: 400px;
+    preferred-height: 280px;
+    min-width: 340px;
+    min-height: 260px;
+    default-font-family: "Segoe UI";
+    default-font-size: 14px;
+
+    in property <[MonitorRow]> monitors;
+    in property <bool> busy: true;
+    in property <string> status: "正在检测显示器…";
+    in-out property <bool> startup-enabled: false;
+    in property <bool> startup-available: false;
+    in property <string> startup-error;
+    callback refresh();
+    callback set-brightness(string, int);
+    callback drain-updates();
+    callback set-startup(bool);
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 20px;
+
+        HorizontalLayout {
+            height: 32px;
+            spacing: 12px;
+            Image {
+                source: @image-url("../assets/icons/glimtray.png");
+                width: 24px;
+                height: 32px;
+                image-fit: contain;
+            }
+            Text { text: "GlimTray"; font-size: 18px; font-weight: 600; color: Palette.foreground; horizontal-stretch: 1; vertical-alignment: center; }
+            Button {
+                text: root.busy ? "读取中…" : "刷新";
+                preferred-width: 64px;
+                horizontal-stretch: 0;
+                enabled: !root.busy;
+                clicked => { root.refresh(); }
+            }
+        }
+
+        if root.monitors.length > 0: ListView {
+            for monitor in root.monitors: MonitorControl {
+                monitor: monitor;
+                busy: root.busy;
+                set-brightness(id, percent) => { root.set-brightness(id, percent); }
+            }
+        }
+
+        if root.monitors.length == 0: Text {
+            text: root.status;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            vertical-stretch: 1;
+            color: Palette.foreground;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            height: 32px;
+            Text { text: "开机自启"; color: Palette.foreground; vertical-alignment: center; horizontal-stretch: 1; }
+            Switch {
+                accessible-label: "开机自启";
+                checked <=> root.startup-enabled;
+                enabled: root.startup-available;
+                toggled => { root.set-startup(self.checked); }
+            }
+        }
+        if root.startup-error != "": Text {
+            text: root.startup-error;
+            font-size: 12px;
+            color: Palette.foreground;
+            wrap: word-wrap;
+        }
+    }
+}
+
+export component QuickPanel inherits Window {
+    title: "GlimTray · 亮度面板";
+    icon: @image-url("../assets/icons/glimtray.png");
+    no-frame: true;
+    always-on-top: true;
+    background: transparent;
+    preferred-width: 360px;
+    preferred-height: 172px;
+    default-font-family: "Segoe UI";
+    default-font-size: 14px;
+    forward-focus: keys;
+
+    in property <[MonitorRow]> monitors;
+    in property <bool> busy: true;
+    in property <string> status: "正在检测显示器…";
+    callback refresh();
+    callback set-brightness(string, int);
+    callback dismiss();
+
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape { root.dismiss(); return accept; }
+            return reject;
+        }
+        Rectangle {
+            background: Palette.background;
+            border-width: 1px;
+            border-color: Palette.border;
+            border-radius: 8px;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 12px;
+                HorizontalLayout {
+                    height: 32px;
+                    Text { text: "亮度"; font-weight: 600; color: Palette.foreground; horizontal-stretch: 1; vertical-alignment: center; }
+                    Button { text: root.busy ? "读取中…" : "刷新"; preferred-width: 64px; horizontal-stretch: 0; enabled: !root.busy; clicked => { root.refresh(); } }
+                }
+                if root.monitors.length > 0: ListView {
+                    for monitor in root.monitors: MonitorControl {
+                        monitor: monitor;
+                        busy: root.busy;
+                        set-brightness(id, percent) => { root.set-brightness(id, percent); }
+                    }
+                }
+                if root.monitors.length == 0: Text {
+                    text: root.status;
+                    color: Palette.foreground;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}
+
+export component AppTray inherits SystemTrayIcon {
+    in property <bool> dark-taskbar: false;
+    icon: root.dark-taskbar ? @image-url("../assets/icons/tray-on-dark.png") : @image-url("../assets/icons/tray-on-light.png");
+    tooltip: "GlimTray · 显示器亮度";
+    callback toggle-panel();
+    callback open-main();
+    callback refresh();
+    callback quit();
+    clicked => { root.toggle-panel(); }
+    Menu {
+        MenuItem { title: "打开主界面"; activated => { root.open-main(); } }
+        MenuItem { title: "刷新显示器"; activated => { root.refresh(); } }
+        MenuSeparator {}
+        MenuItem { title: "退出"; activated => { root.quit(); } }
+    }
+}

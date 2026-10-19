@@ -1,0 +1,15 @@
+# Rust build output
+/target/
+/dist/
+**/*.rs.bk
+
+# Local logs and temporary files
+*.log
+*.tmp
+*.temp
+/work/
+
+# Windows and macOS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store

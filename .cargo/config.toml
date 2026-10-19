@@ -1,0 +1,4 @@
+[target.x86_64-pc-windows-msvc]
+# Keep the portable executable independent of the VC++ Redistributable.
+# Match Slint's recommended stack size for Windows debug builds.
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/STACK:8000000"]

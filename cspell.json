@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/streetsidesoftware/cspell/main/cspell.schema.json",
+  "version": "0.2",
+  "language": "en",
+  "useGitignore": true,
+  "ignorePaths": [
+    ".git/**",
+    "target/**",
+    "Cargo.lock",
+    "work/**"
+  ],
+  "words": [
+    "Clippy",
+    "CodeLLDB",
+    "DDC",
+    "FemtoVG",
+    "GlimTray",
+    "MSVC",
+    "Slint",
+    "VCP",
+    "WMI",
+    "codegen",
+    "ddcci",
+    "glimtray",
+    "lldb",
+    "rustc",
+    "rustfmt",
+    "rustup",
+    "winit",
+    "winresource",
+    "HMONITOR",
+    "MONITORINFO",
+    "MONITORINFOEXW",
+    "LPARAM",
+    "RAII",
+    "serde",
+    "HWND",
+    "HHOOK",
+    "WPARAM",
+    "LRESULT"
+  ]
+}

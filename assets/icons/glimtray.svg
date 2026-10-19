@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="-2 -2 20 20" fill="none">
+  <title>GlimTray</title>
+  <g stroke="#0078D4" stroke-width="1.25" stroke-linecap="round">
+    <circle cx="8" cy="8" r="3"/>
+    <path d="M8 1.25V2.75M8 13.25V14.75M1.25 8H2.75M13.25 8H14.75"/>
+    <path d="M3.227 3.227L4.288 4.288M11.712 11.712L12.773 12.773M3.227 12.773L4.288 11.712M11.712 4.288L12.773 3.227"/>
+  </g>
+</svg>
