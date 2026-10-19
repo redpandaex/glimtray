@@ -105,13 +105,13 @@ GitHub Actions 在推送 `main`、向 `main` 提交 PR 和推送 `v*` tag 时运
 
 普通推送和 PR 只生成构建产物，不创建 Release。带 `-rc.1` 等后缀的 tag 创建预发布版。工作流下载固定版本 UPX 并校验 SHA256，生成压缩版便携 ZIP（`*-compact.zip`，包含 `glimtray.exe` 和 README）及对应的 `*-SHA256SUMS.txt`；不发布普通版 ZIP。
 
-例如发布当前 `0.1.0` 版本，在代码已提交并推送到 `main` 后执行：
+例如发布当前 `0.1.1` 版本，在代码已提交并推送到 `main` 后执行：
 
 ```powershell
 git switch main
 git pull --ff-only origin main
-git tag -a v0.1.0 -m "GlimTray v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "GlimTray v0.1.1"
+git push origin v0.1.1
 ```
 
 后续版本先修改 `Cargo.toml`，通过 Cargo 更新并提交 `Cargo.lock`，再合入 `main`、推送对应 tag。工作流使用仓库自动提供的 `GITHUB_TOKEN`，只有发布 job 具有 `contents: write` 权限。
