@@ -105,7 +105,6 @@ std = [
 ]
 svg = [
     "dep:resvg",
-    "i-slint-common/svg-text",
 ]
 system-tray = [
     "dep:ksni",
@@ -198,7 +197,6 @@ default-features = false
 version = "0.25"
 features = [
     "png",
-    "jpeg",
 ]
 optional = true
 default-features = false
@@ -255,11 +253,6 @@ package = "raw-window-handle"
 
 [dependencies.resvg]
 version = "0.48.1"
-features = [
-    "text",
-    "raster-images",
-    "svgz",
-]
 optional = true
 default-features = false
 

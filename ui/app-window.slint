@@ -99,7 +99,7 @@ export component QuickPanel inherits Window {
 
 export component AppTray inherits SystemTrayIcon {
     in property <bool> dark-taskbar: false;
-    in-out property <bool> startup-enabled: false;
+    in property <bool> startup-enabled: false;
     in property <bool> startup-available: false;
     in property <string> startup-error;
     callback set-startup(bool);
@@ -110,11 +110,9 @@ export component AppTray inherits SystemTrayIcon {
     clicked => { root.toggle-panel(); }
     Menu {
         MenuItem {
-            title: "开机自启";
-            checkable: true;
-            checked <=> root.startup-enabled;
+            title: !root.startup-available ? "开机自启（不可用）" : root.startup-enabled ? "关闭开机自启" : "开启开机自启";
             enabled: root.startup-available;
-            activated => { root.set-startup(root.startup-enabled); }
+            activated => { root.set-startup(!root.startup-enabled); }
         }
         MenuSeparator {}
         MenuItem { title: "退出"; activated => { root.quit(); } }

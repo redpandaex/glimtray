@@ -50,6 +50,7 @@ cargo run --locked -- --list
 
 ```powershell
 cargo build --release --locked
+./scripts/check-runtime-assets.ps1
 ./scripts/package.ps1
 ```
 
@@ -65,7 +66,7 @@ cargo build --release --locked
 
 脚本复制编译产物后再压缩，保留 `target/release/glimtray.exe`，生成 `*-compact.exe`、`*-compact.zip` 和校验文件，并执行 UPX 数据完整性检查。ZIP 内的程序名仍为 `glimtray.exe`。
 
-`standard` 和 `compact` 使用相同的应用源码与裁剪依赖，名称只区分是否经过 UPX 压缩。当前本地构建未压缩约 4.44 MiB，压缩后约 1.52 MiB；实际大小会随编译器和版本变化。UPX 减少磁盘体积，运行时需要解压。
+`standard` 和 `compact` 使用相同的应用源码与裁剪依赖，名称只区分是否经过 UPX 压缩。当前本地构建未压缩约 3.70 MiB，压缩后约 1.32 MiB；实际大小会随编译器和版本变化。UPX 减少磁盘体积，运行时需要解压。
 
 ## 架构与依赖
 
@@ -73,13 +74,17 @@ cargo build --release --locked
 
 设备读取的响应超时为 8 秒，亮度写入的响应超时为 3 秒。超时会结束控制子进程，重新展开浮层后可重试。连续调节请求会合并，减少重复硬件调用。
 
+名称通过 `QueryDisplayConfig` 和 `DisplayConfigGetDeviceInfo` 读取，以 GDI 显示源名称匹配 `HMONITOR`。仅在显示目标与物理 DDC 句柄一一对应时使用目标名称；镜像、多物理句柄或查询失败时，保留有效的物理描述或回退为编号。拓扑变化引起的缓冲区不足会有限重试，名称查询失败不会阻止亮度控制。
+
 Windows x64 静态链接 CRT，无需额外安装 VC++ Redistributable。界面使用 Windows 系统字体，没有随程序分发中文字体文件。当前构建已关闭 Slint 无障碍集成。
 
 ### 为什么有 vendor 目录？
 
-Slint 桌面端启用了 Parley 的 `complex-scripts` 特性，会引入较大的分词字典。项目将 `i-slint-core 1.18.1` 保存到 `vendor/`，仅移除这一项依赖特性，并通过 `[patch.crates-io]` 应用补丁。
+项目将 `i-slint-core 1.18.1` 保存到 `vendor/`，通过 `[patch.crates-io]` 裁剪 Parley 分词字典、JPEG 解码和 SVG 扩展支持。保留普通界面文字、PNG 和 SVG 矢量路径渲染。SVG 字体桥接改用默认解析选项，移除 SVG 文字、内嵌位图和 SVGZ 支持。
 
 Slint 和 `slint-build` 固定为 `=1.18.1`。本地和 CI 使用同一份源码；升级时需重新核对补丁。来源、校验、许可及语言支持影响见 [vendor/README.md](../vendor/README.md)。`vendor/` 只在构建时使用，无需随 EXE 分发。
+
+`check-runtime-assets.ps1` 静态检查编译器生成的嵌入资源，拒绝不支持的图片格式及 SVG 文字、位图。CI 另检查运行时特性树，排除构建工具和过程宏的依赖；构建工具仍可使用完整的图片支持。
 
 ## 自动构建与发布
 
@@ -118,6 +123,7 @@ git push origin $releaseTag
 | `src/app.rs` | UI 状态、托盘生命周期、自启绑定和异步更新 |
 | `src/flyout_window.rs`、`src/flyout.rs` | 浮层窗口、定位及收起规则 |
 | `src/native.rs` | Windows 显示器枚举、亮度接口和句柄管理 |
+| `src/monitor_names.rs` | 显示器友好名称查询、屏幕匹配及名称回退 |
 | `src/worker/` | 子进程协议、超时管理和请求调度 |
 | `src/startup.rs` | 当前用户开机自启注册、读取和移除 |
 | `ui/app-window.slint` | 亮度浮层、滑块和原生托盘菜单 |

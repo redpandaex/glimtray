@@ -1,4 +1,5 @@
 use crate::display::{BrightnessRange, DisplaySnapshot};
+use crate::monitor_names::{MonitorNames, from_wide};
 use std::mem::size_of;
 use windows::Win32::Devices::Display::{
     DestroyPhysicalMonitor, GetMonitorBrightness, GetNumberOfPhysicalMonitorsFromHMONITOR,
@@ -141,6 +142,7 @@ impl NativeBackend {
             .ok()
             .map_err(|error| format!("无法枚举显示器：{error}"))?;
         }
+        let names = MonitorNames::query();
         for (logical_index, monitor) in logical.into_iter().enumerate() {
             let mut info = MONITORINFOEXW::default();
             info.monitorInfo.cbSize = size_of::<MONITORINFOEXW>() as u32;
@@ -158,7 +160,7 @@ impl NativeBackend {
             if count_result.is_err() || count == 0 || count > 64 {
                 self.devices.push(Device::unavailable(
                     format!("{epoch}:{logical_index}:unavailable"),
-                    format!("显示器 {}", logical_index + 1),
+                    names.for_logical(&connection, logical_index),
                     connection,
                     "当前连接未提供 DDC/CI 控制接口；内置屏亮度尚未接入。".into(),
                 ));
@@ -181,20 +183,22 @@ impl NativeBackend {
             if result.is_err() || owned.is_empty() {
                 self.devices.push(Device::unavailable(
                     format!("{epoch}:{logical_index}:unavailable"),
-                    format!("显示器 {}", logical_index + 1),
+                    names.for_logical(&connection, logical_index),
                     connection,
                     "无法打开显示器控制接口，请检查连接后刷新。".into(),
                 ));
                 continue;
             }
-            for (physical_index, handle, name) in owned {
+            for (physical_index, handle, description) in owned {
                 let mut device = Device::unavailable(
                     format!("{epoch}:{logical_index}:{physical_index}"),
-                    if name.is_empty() {
-                        format!("显示器 {}", logical_index + 1)
-                    } else {
-                        name
-                    },
+                    names.for_physical(
+                        &connection,
+                        &description,
+                        logical_index,
+                        physical_index,
+                        count as usize,
+                    ),
                     connection.clone(),
                     String::new(),
                 );
@@ -230,14 +234,6 @@ unsafe extern "system" fn collect_monitor(
     // SAFETY: EnumDisplayMonitors runs synchronously; data points to its caller's live vector.
     unsafe { (&mut *(data.0 as *mut Vec<HMONITOR>)).push(monitor) };
     BOOL(1)
-}
-
-fn from_wide(value: &[u16]) -> String {
-    let length = value
-        .iter()
-        .position(|value| *value == 0)
-        .unwrap_or(value.len());
-    String::from_utf16_lossy(&value[..length]).trim().to_owned()
 }
 
 fn should_adopt_handle(enumeration_succeeded: bool, handle: HANDLE) -> bool {

@@ -89,41 +89,9 @@ impl ParsedSVG {
     }
 }
 
-/// Resolves SVG `<text>` fonts through the shared [`sharedfontique::svg`] bridge
-/// against the running `SlintContext`'s collection, so SVG text uses the same fonts
-/// as the rest of the UI.
-/// Without a context the text stays unresolved, which never happens for a displayable
-/// image since the platform is up by then.
-///
-/// Gated on `shared-parley`: without Slint's text engine there is no text layout, so
-/// SVG text resolution would be moot.
-#[cfg(all(feature = "shared-parley", not(target_arch = "wasm32")))]
-fn svg_options() -> usvg::Options<'static> {
-    use i_slint_common::sharedfontique::{self, fontique};
-
-    fn find_font(
-        families: &[fontique::QueryFamily],
-        attributes: fontique::Attributes,
-        require_char: Option<char>,
-    ) -> Option<fontique::QueryFont> {
-        crate::context::GLOBAL_CONTEXT.with(|p| {
-            let ctx = p.get()?;
-            let mut font_context = ctx.font_context().try_borrow_mut().ok()?;
-            let parley::FontContext { collection, source_cache } = &mut font_context.inner;
-            sharedfontique::svg::query_font(
-                collection,
-                source_cache,
-                families,
-                attributes,
-                require_char,
-            )
-        })
-    }
-
-    sharedfontique::svg::options(find_font)
-}
-
-#[cfg(all(not(feature = "shared-parley"), not(target_arch = "wasm32")))]
+// GlimTray's embedded SVGs contain vector paths only. Keep vector rendering
+// without the SVG text/font bridge; ordinary Slint UI text is unaffected.
+#[cfg(not(target_arch = "wasm32"))]
 fn svg_options() -> usvg::Options<'static> {
     usvg::Options::default()
 }
