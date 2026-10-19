@@ -20,7 +20,7 @@ GlimTray 是一个使用 Rust 和 Slint 开发的 Windows 托盘亮度调节工�
 - **自动读取**：每次展开时重新枚举设备并读取亮度，支持插拔后更新设备列表。
 - **开机自启**：托盘菜单根据当前状态显示开启或关闭操作，支持当前用户的登录自启动。
 - **主题适配**：托盘图标跟随 Windows 系统任务栏的深浅主题。
-- **便携运行**：下载 EXE 即可运行，无需安装，也提供 ZIP；当前本地 Release 构建经 UPX 压缩后约 1.3 MiB，具体大小以发布附件为准。
+- **便携运行**：下载 EXE 即可运行，无需安装，也提供 ZIP；当前本地 Release 构建经 UPX 压缩后约 1.0 MiB，具体大小以发布附件为准。
 
 ## 运行要求
 
@@ -34,7 +34,7 @@ GlimTray 是一个使用 Rust 和 Slint 开发的 Windows 托盘亮度调节工�
 
 1. 前往 [Releases](https://github.com/redpandaex/glimtray/releases)，下载 Windows x64 的 `*-compact.exe`，保存到固定目录后双击运行。程序启动后驻留托盘。
 2. 也可下载 `*-compact.zip`，完整解压后运行其中的 `glimtray.exe`，与单独下载的 EXE 是同一程序。发布页的 SHA256 校验文件同时覆盖 EXE 和 ZIP；旧版本若仅提供 ZIP，解压运行即可。
-3. 左击托盘图标，等待亮度读取完成后拖动对应滑块。读取期间滑块暂时禁用。
+3. 左击托盘图标，等待亮度读取完成后拖动对应滑块，松开后应用亮度。读取期间滑块暂时禁用。
 4. 右键托盘图标，点击“开启开机自启”即可启用；保存成功后菜单变为“关闭开机自启”，再次点击即可关闭。选择“退出”结束程序。
 
 自启设置默认关闭，使用当前用户的 Windows `Run` 注册项，无需管理员权限。移动程序位置后，需要从新位置重新启用自启。
@@ -72,10 +72,10 @@ cargo run --locked
 构建 Release 版本：
 
 ```powershell
-cargo build --release --locked
+cargo +nightly-2026-10-18 release-build
 ```
 
-产物位于 `target/release/glimtray.exe`。便携打包、UPX 压缩、VS Code 配置和依赖裁剪说明见[开发文档](https://github.com/redpandaex/glimtray/blob/main/docs/development.md)。
+产物位于 `target/x86_64-pc-windows-msvc/release/glimtray.exe`。stable 的 `cargo build --release` 仍可用于快速检查，但不含 panic 裁剪，体积更大。便携打包、UPX 压缩、VS Code 配置和依赖裁剪说明见[开发文档](https://github.com/redpandaex/glimtray/blob/main/docs/development.md)。
 
 ## 当前限制
 
