@@ -55,6 +55,9 @@ jobs:
       - name: Test release guard
         run: ./scripts/test-release-guard.ps1
 
+      - name: Test runtime asset guard
+        run: ./scripts/test-runtime-assets.ps1
+
       - name: Check formatting
         run: cargo fmt --package glimtray -- --check
 

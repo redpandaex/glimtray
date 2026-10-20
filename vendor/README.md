@@ -49,7 +49,7 @@ The patches omit:
 
 The current UI embeds two PNG images and no vector SVGs.
 `scripts/check-runtime-assets.ps1` inspects generated Rust resources after a
-Release build and rejects unsupported image formats or SVG text/raster elements.
+Release build and rejects all image formats other than PNG, including SVG.
 It checks static data without running the application. Reassess the patches
 before adding new image formats, SVG assets or editable/long-form multilingual
 text.

@@ -12,7 +12,9 @@ export struct MonitorRow {
 component BrightnessSlider inherits Rectangle {
     in-out property <float> value: 0;
     in property <bool> enabled: true;
+    out property <bool> interacting: root.dragging || root.key-adjusting;
     callback released(float);
+    callback canceled();
 
     height: 32px;
     opacity: root.enabled ? 1 : 0.55;
@@ -21,6 +23,7 @@ component BrightnessSlider inherits Rectangle {
     private property <length> usable-width: max(0px, root.width - root.thumb-size);
     private property <length> thumb-x: root.usable-width * clamp(root.value, 0, 100) / 100;
     private property <bool> dragging: false;
+    private property <bool> key-adjusting: false;
     private property <length> drag-offset: root.thumb-size / 2;
 
     hover-background := Rectangle {
@@ -82,6 +85,13 @@ component BrightnessSlider inherits Rectangle {
         height: root.height + 12px;
         enabled: root.enabled;
         pointer-event(event) => {
+            if (event.kind == PointerEventKind.cancel) {
+                if (root.dragging) {
+                    root.dragging = false;
+                    root.canceled();
+                }
+                return;
+            }
             if (event.button != PointerEventButton.left) {
                 return;
             }
@@ -109,23 +119,33 @@ component BrightnessSlider inherits Rectangle {
 
     focus-scope := FocusScope {
         enabled: root.enabled;
+        changed has-focus => {
+            if (!self.has-focus && root.key-adjusting) {
+                root.key-adjusting = false;
+                root.canceled();
+            }
+        }
         key-pressed(event) => {
             if (!root.enabled) {
                 return reject;
             }
             if (event.text == Key.RightArrow || event.text == Key.UpArrow) {
+                root.key-adjusting = true;
                 root.set-value(root.value + 1);
                 return accept;
             }
             if (event.text == Key.LeftArrow || event.text == Key.DownArrow) {
+                root.key-adjusting = true;
                 root.set-value(root.value - 1);
                 return accept;
             }
             if (event.text == Key.Home) {
+                root.key-adjusting = true;
                 root.set-value(0);
                 return accept;
             }
             if (event.text == Key.End) {
+                root.key-adjusting = true;
                 root.set-value(100);
                 return accept;
             }
@@ -138,6 +158,7 @@ component BrightnessSlider inherits Rectangle {
             if (event.text == Key.RightArrow || event.text == Key.UpArrow
                 || event.text == Key.LeftArrow || event.text == Key.DownArrow
                 || event.text == Key.Home || event.text == Key.End) {
+                root.key-adjusting = false;
                 root.released(root.value);
                 return accept;
             }
@@ -169,8 +190,12 @@ component MonitorControl inherits Rectangle {
     private property <float> preview-brightness: root.monitor.brightness;
     // A drag updates the preview through the two-way binding below; model updates
     // must be pushed back into the preview once the committed value is known.
-    changed model-brightness => { root.preview-brightness = root.model-brightness; }
-    height: root.monitor.can-control ? 96px : 144px;
+    changed model-brightness => {
+        if (!brightness-slider.interacting) {
+            root.preview-brightness = root.model-brightness;
+        }
+    }
+    height: 96px;
     background: transparent;
 
     VerticalLayout {
@@ -184,18 +209,27 @@ component MonitorControl inherits Rectangle {
             Text { text: root.monitor.name; overflow: elide; color: Palette.foreground; horizontal-stretch: 1; vertical-alignment: center; }
             Text { text: root.monitor.can-control ? round(root.preview-brightness) + "%" : "—"; min-width: 48px; horizontal-alignment: right; vertical-alignment: center; color: Palette.foreground; }
         }
-        brightness-slider := BrightnessSlider {
-            value <=> root.preview-brightness;
-            enabled: root.monitor.can-control && !root.busy;
-            // Dragging only updates the preview; commit one DDC/CI write on release.
-            released(value) => { root.set-brightness(root.monitor.id, round(value)); }
-        }
-        if !root.monitor.can-control: Text {
-            text: root.monitor.message;
-            font-size: 12px;
-            color: Palette.foreground;
-            opacity: 0.75;
-            wrap: word-wrap;
+        Rectangle {
+            height: 32px;
+            brightness-slider := BrightnessSlider {
+                width: 100%;
+                value <=> root.preview-brightness;
+                visible: root.monitor.can-control;
+                enabled: root.monitor.can-control && !root.busy;
+                // Dragging only updates the preview; commit one DDC/CI write on release.
+                released(value) => { root.set-brightness(root.monitor.id, round(value)); }
+                canceled => { root.preview-brightness = root.model-brightness; }
+            }
+            if !root.monitor.can-control: Text {
+                width: 100%;
+                height: 100%;
+                text: root.monitor.message;
+                font-size: 12px;
+                color: Palette.foreground;
+                opacity: 0.75;
+                wrap: word-wrap;
+                overflow: elide;
+            }
         }
     }
 }
