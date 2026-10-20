@@ -90,7 +90,7 @@ Windows x64 静态链接 CRT，无需额外安装 VC++ Redistributable。界面�
 
 Slint 和 `slint-build` 固定为 `=1.18.1`。本地和 CI 使用同一份源码；升级时需重新核对三个 crate 的补丁。来源、校验、许可及语言支持影响见 [vendor/README.md](../vendor/README.md)。`vendor/` 只在构建时使用，无需随 EXE 分发。
 
-`check-runtime-assets.ps1` 静态检查编译器生成的嵌入资源，拒绝不支持的图片格式及 SVG 文字、位图。CI 另检查运行时特性树，排除构建工具和过程宏的依赖；构建工具仍可使用完整的图片和 SVG 支持。
+`check-runtime-assets.ps1` 静态检查编译器生成的嵌入资源，只允许 PNG，拒绝 SVG、JPEG 等格式。`test-runtime-assets.ps1` 验证这一白名单，CI 会运行该测试。CI 另检查运行时特性树，排除构建工具和过程宏的依赖；构建工具仍可使用完整的图片和 SVG 支持。
 
 ## 自动构建与发布
 

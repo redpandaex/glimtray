@@ -37,7 +37,7 @@ cargo build --release --locked
 ./scripts/check-runtime-assets.ps1
 ```
 
-涉及 Slint 裁剪依赖时，请阅读 [vendor 说明](vendor/README.md)，保留上游版权和许可证，并确认裁剪的运行时特性未重新启用。添加图片时需检查 PNG 或 SVG 矢量资源与当前运行时的兼容性。不要对未修改的上游源码进行批量格式化。
+涉及 Slint 裁剪依赖时，请阅读 [vendor 说明](vendor/README.md)，保留上游版权和许可证，并确认裁剪的运行时特性未重新启用。运行时图片只支持 PNG；修改资源校验时运行 `./scripts/test-runtime-assets.ps1`。不要对未修改的上游源码进行批量格式化。
 
 ## 真实设备验收
 

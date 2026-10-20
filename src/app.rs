@@ -74,6 +74,7 @@ fn apply_update(ui: &QuickPanel, state: &RefCell<State>, update: Update) {
                     state.rows.set_vec(
                         displays
                             .into_iter()
+                            .take(5)
                             .map(row_from_snapshot)
                             .collect::<Vec<_>>(),
                     );
@@ -334,11 +335,15 @@ fn bind_flyout(panel: &QuickPanel, tray: &AppTray, flyout: &Flyout) {
 #[cfg(all(test, windows))]
 mod tests {
     use super::*;
+    use slint::winit_030::WinitWindowAccessor;
     use slint::winit_030::winit::platform::windows::EventLoopBuilderExtWindows;
 
     fn click_slider(panel: &QuickPanel, x: f32, y: f32) {
         use slint::platform::{PointerEventButton, WindowEvent};
         let position = slint::LogicalPosition::new(x, y);
+        panel
+            .window()
+            .dispatch_event(WindowEvent::PointerMoved { position });
         panel.window().dispatch_event(WindowEvent::PointerPressed {
             position,
             button: PointerEventButton::Left,
@@ -368,14 +373,40 @@ mod tests {
         let panel = QuickPanel::new().unwrap();
         let tray = AppTray::new().unwrap();
         let flyout = Flyout::new(&panel).unwrap();
-        let rows = Rc::new(VecModel::from(vec![MonitorRow {
-            id: "test".into(),
-            name: "测试显示器".into(),
-            brightness: 50,
-            can_control: true,
-            pending: false,
-            message: "DDC/CI".into(),
-        }]));
+        // Use only the synthetic input below so the real cursor and foreground
+        // cannot change hover/focus pixels while snapshots are compared.
+        panel.window().on_winit_window_event(|_, event| {
+            use slint::winit_030::{EventResult, winit::event::WindowEvent};
+            match event {
+                WindowEvent::Focused(_)
+                | WindowEvent::CursorMoved { .. }
+                | WindowEvent::CursorEntered { .. }
+                | WindowEvent::CursorLeft { .. }
+                | WindowEvent::MouseInput { .. }
+                | WindowEvent::MouseWheel { .. }
+                | WindowEvent::KeyboardInput { .. }
+                | WindowEvent::ModifiersChanged(_) => EventResult::PreventDefault,
+                _ => EventResult::Propagate,
+            }
+        });
+        let rows = Rc::new(VecModel::from(vec![
+            MonitorRow {
+                id: "test".into(),
+                name: "测试显示器".into(),
+                brightness: 50,
+                can_control: true,
+                pending: false,
+                message: "DDC/CI".into(),
+            },
+            MonitorRow {
+                id: "other".into(),
+                name: "Other monitor".into(),
+                brightness: 50,
+                can_control: true,
+                pending: false,
+                message: "DDC/CI".into(),
+            },
+        ]));
         panel.set_monitors(rows.clone().into());
         panel.set_busy(false);
         let refreshes = Rc::new(Cell::new(0));
@@ -556,6 +587,117 @@ mod tests {
                             if !tray.get_startup_enabled() || !tray.get_startup_available() || !tray.get_startup_error().is_empty() {
                                 return Err("startup menu did not load the persisted enabled state".into());
                             }
+                            tray.invoke_toggle_panel();
+                        }
+                        10 => {
+                            click_slider(&panel, 192.3, 65.0);
+                            if requested.get() != 54 {
+                                return Err(format!("first slider release did not commit 54%: got {}%, window {:?}", requested.get(), panel.window().size()));
+                            }
+                            panel.window().dispatch_event(slint::platform::WindowEvent::PointerMoved {
+                                position: slint::LogicalPosition::new(272.4, 65.0),
+                            });
+                            panel.window().dispatch_event(slint::platform::WindowEvent::PointerPressed {
+                                position: slint::LogicalPosition::new(272.4, 65.0),
+                                button: slint::platform::PointerEventButton::Left,
+                            });
+                            if requested.get() != 54 {
+                                return Err("dragging submitted a write before release".into());
+                            }
+                            apply_readback(&panel, &rows, 50);
+                        }
+                        11 => {
+                            panel.window().dispatch_event(slint::platform::WindowEvent::PointerReleased {
+                                position: slint::LogicalPosition::new(272.4, 65.0),
+                                button: slint::platform::PointerEventButton::Left,
+                            });
+                            if requested.get() != 80 {
+                                return Err(format!("old readback replaced the active drag target: expected 80%, got {}%", requested.get()));
+                            }
+                        }
+                        12 => {
+                            panel.window().dispatch_event(slint::platform::WindowEvent::KeyPressed {
+                                text: slint::platform::Key::End.into(),
+                            });
+                            if requested.get() != 80 {
+                                return Err("keyboard input submitted a write before release".into());
+                            }
+                            apply_readback(&panel, &rows, 50);
+                        }
+                        13 => {
+                            panel.window().dispatch_event(slint::platform::WindowEvent::KeyReleased {
+                                text: slint::platform::Key::End.into(),
+                            });
+                            if requested.get() != 100 {
+                                return Err(format!("old readback replaced the active keyboard target: expected 100%, got {}%", requested.get()));
+                            }
+                        }
+                        14 => {
+                            apply_readback(&panel, &rows, 50);
+                            focus_handler.refresh_layout();
+                            panel.window().dispatch_event(slint::platform::WindowEvent::KeyPressed {
+                                text: slint::platform::Key::Tab.into(),
+                            });
+                            panel.window().dispatch_event(slint::platform::WindowEvent::KeyReleased {
+                                text: slint::platform::Key::Tab.into(),
+                            });
+                            panel.window().dispatch_event(slint::platform::WindowEvent::PointerMoved {
+                                position: slint::LogicalPosition::new(8.0, 8.0),
+                            });
+                        }
+                        15 => {
+                            let pixels = panel.window().take_snapshot().map_err(|error| error.to_string())?;
+                            *before_pending.borrow_mut() = Some(pixels.as_bytes().to_vec());
+                            click_slider(&panel, 192.3, 65.0);
+                            // The first click restores focus after Tab navigation.
+                            click_slider(&panel, 192.3, 65.0);
+                            if requested.get() != 54 {
+                                return Err("keyboard cancellation setup did not commit 54%".into());
+                            }
+                            panel.window().dispatch_event(slint::platform::WindowEvent::KeyPressed {
+                                text: slint::platform::Key::End.into(),
+                            });
+                            apply_readback(&panel, &rows, 50);
+                            panel.window().dispatch_event(slint::platform::WindowEvent::KeyPressed {
+                                text: slint::platform::Key::Tab.into(),
+                            });
+                        }
+                        16 => {
+                            let pixels = panel.window().take_snapshot().map_err(|error| error.to_string())?;
+                            if before_pending.borrow().as_deref() != Some(pixels.as_bytes()) {
+                                std::fs::write("work/cancel-before.rgba", before_pending.borrow().as_deref().unwrap()).map_err(|error| error.to_string())?;
+                                std::fs::write("work/cancel-after.rgba", pixels.as_bytes()).map_err(|error| error.to_string())?;
+                                std::fs::write("work/cancel-size.json", format!("[{},{}]", pixels.width(), pixels.height())).map_err(|error| error.to_string())?;
+                                return Err("canceled keyboard preview did not return to the latest readback".into());
+                            }
+                            if requested.get() != 54 {
+                                return Err(format!("canceling keyboard input committed its preview: expected 54%, got {}%", requested.get()));
+                            }
+                        }
+                        17 => {
+                            let state = RefCell::new(State {
+                                rows: rows.clone(),
+                                revisions: Revisions::default(),
+                                next_revision: 0,
+                                scanning: true,
+                            });
+                            apply_update(&panel, &state, Update::Listed(Ok((0..6).map(|index| DisplaySnapshot {
+                                id: index.to_string(),
+                                name: format!("Test monitor {index}"),
+                                connection: "DISPLAY".into(),
+                                brightness: None,
+                                message: "DDC/CI is unavailable. Check the monitor settings and connection.".into(),
+                            }).collect())));
+                            if rows.row_count() != 5 || rows.row_data(4).unwrap().id != "4" {
+                                return Err(format!("expected the first five monitors, got {} rows", rows.row_count()));
+                            }
+                            focus_handler.refresh_layout();
+                        }
+                        18 => {
+                            let height = panel.window().size().to_logical(panel.window().scale_factor()).height;
+                            if height > 520.0 {
+                                return Err(format!("five unavailable monitors exceeded the panel height limit: {height}"));
+                            }
                             let _ = slint::quit_event_loop();
                         }
                         _ => {}
@@ -578,6 +720,32 @@ mod tests {
             "UI regression: {:?}",
             error.borrow()
         );
-        assert_eq!(completed.get(), 10);
+        assert_eq!(completed.get(), 19);
+    }
+
+    fn apply_readback(panel: &QuickPanel, rows: &Rc<VecModel<MonitorRow>>, brightness: u8) {
+        let state = RefCell::new(State {
+            rows: rows.clone(),
+            revisions: Revisions::default(),
+            next_revision: 1,
+            scanning: false,
+        });
+        state.borrow_mut().revisions.record("test", 1);
+        apply_update(
+            panel,
+            &state,
+            Update::Applied {
+                id: "test".into(),
+                revision: 1,
+                result: Ok(DisplaySnapshot {
+                    id: "test".into(),
+                    name: "Test monitor".into(),
+                    connection: "DISPLAY1".into(),
+                    brightness: Some(brightness),
+                    message: "DDC/CI".into(),
+                }),
+                fatal: false,
+            },
+        );
     }
 }

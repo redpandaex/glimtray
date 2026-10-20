@@ -143,10 +143,7 @@ impl Flyout {
     fn fit(&self, panel: &QuickPanel, anchor: Option<Anchor>) {
         let generation = self.session.borrow().generation;
         let model = panel.get_monitors();
-        let row_height: f32 = (0..model.row_count())
-            .filter_map(|index| model.row_data(index))
-            .map(|row| if row.can_control { 96.0 } else { 144.0 })
-            .sum();
+        let row_height = model.row_count() as f32 * 96.0;
         let height = (32.0 + row_height.max(96.0)).min(520.0);
         panel
             .window()
